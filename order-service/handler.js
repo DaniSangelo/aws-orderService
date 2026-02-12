@@ -1,8 +1,8 @@
 'use strict';
 
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID } = require("crypto");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, PutCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 
 const dynamoDbClient = new DynamoDBClient({});
@@ -13,7 +13,7 @@ module.exports.createOrder = async (event) => {
   try {
     const body = JSON.parse(event.body);
     const order = {
-      orderId: uuidv4(),
+      orderId: randomUUID(),
       customerName: body.customerName,
       totalAmount: body.totalAmount,
       status: 'PENDING',
