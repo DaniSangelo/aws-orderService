@@ -4,7 +4,7 @@ const { randomUUID } = require("crypto");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
-
+const { OrderStatus } = require("./constants");
 const dynamoDbClient = new DynamoDBClient({});
 const ddbClient = DynamoDBDocumentClient.from(dynamoDbClient);
 const sqsClient = new SQSClient({});
@@ -16,7 +16,7 @@ module.exports.createOrder = async (event) => {
       orderId: randomUUID(),
       customerName: body.customerName,
       totalAmount: body.totalAmount,
-      status: 'PENDING',
+      status: OrderStatus.PENDING,
       createdAt: new Date().toISOString()
     }
 
@@ -52,7 +52,7 @@ module.exports.processPayment = async (event) => {
     const { orderId } = JSON.parse(record.body);
     console.log(`Processing payment for: ${ orderId }`)
     const paymentApproved = Math.random() > 0.3;
-    const newStatus = paymentApproved ? 'APPROVED' : 'REJECTED';
+    const newStatus = paymentApproved ? OrderStatus.APPROVED : OrderStatus.REJECTED;
 
     await ddbClient.send(
       new UpdateCommand({
@@ -66,7 +66,7 @@ module.exports.processPayment = async (event) => {
         ExpressionAttributeValues: {
           ":status": newStatus,
           ":now": new Date().toISOString(),
-          ":expectedStatus": 'PENDING'
+          ":expectedStatus": OrderStatus.PENDING
         }
       })
     )
