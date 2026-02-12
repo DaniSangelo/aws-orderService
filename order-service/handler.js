@@ -46,3 +46,28 @@ module.exports.createOrder = async (event) => {
     }
   }
 };
+
+module.exports.processPayment = async (event) => {
+  for (const record of event.Records) {
+    const { orderId } = JSON.parse(record.body);
+    console.log(`Processing payment for: ${ orderId }`)
+    const paymentApproved = Math.random() > 0.3;
+    const newStatus = paymentApproved ? 'APPROVED' : 'REJECTED';
+
+    await ddbClient.send(
+      new UpdateCommand({
+        TableName: process.env.ORDERS_TABLE,
+        Key: { orderId },
+        UpdateExpression: "set #status = :status",
+        ExpressionAttributeNames: {
+          "#status": "status"
+        },
+        ExpressionAttributeValues: {
+          ":status": newStatus
+        }
+      })
+    )
+
+    console.log(`Order ${orderId} status updated to ${newStatus}`);
+  }
+}
