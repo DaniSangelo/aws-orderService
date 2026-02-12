@@ -1,0 +1,97 @@
+service: order-service
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  environment: # Sets global environment variables available to all functions
+    ORDERS_TABLE: OrdersTable # Environment variable for the DynamoDB table name
+    ORDER_QUEUE_URL: # Environment variable for the SQS Queue URL
+      Fn::GetAtt:
+        - OrderQueue
+        - QueueUrl
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource:
+        - Fn::GetAtt: [OrdersTable, Arn]
+
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - Fn::GetAtt: [OrderQueue, Arn]
+
+  # iam: # Configures Identity and Access Management (IAM) permissions
+  #   role: # Configures the default IAM role for the service functions
+  #     statements: # List of permission statements (policies) attached to the role
+  #       - Effect: Allow # Explicitly allows the actions specified below
+  #         Action: # List of AWS actions to allow
+  #           - dynamodb:PutItem # Permission to add a new item to a DynamoDB table
+  #           - dynamodb:UpdateItem # Permission to update an existing item in a DynamoDB table
+  #         Resource:
+  #           - Fn::GetAtt: [OrdersTable, Arn]
+  #       - Effect: Allow # Start of a new permission statement
+  #         Action: # List of actions
+  #           - sqs:SendMessage # Permission to send a message to an SQS queue
+  #         Resource:
+  #           - Fn::GetAtt: [OrdersTable, Arn]
+
+functions: # Definitions of the Lambda functions for this service (Moved to top-level for correctness)
+  createOrder: # Defines a function named 'createOrder'
+    handler: handler.createOrder # The specific function in 'handler.js' to execute
+    events: # The events that trigger this function
+      - http: # Configures an API Gateway HTTP event
+          path: api/v1/orders # The URL path for the API endpoint (e.g., /orders)
+          method: post # The HTTP method allowed for this endpoint (POST)
+          cors: true # Enables Cross-Origin Resource Sharing (CORS) for browser access
+    dependsOn:
+      - OrderQueue
+
+  processPayment:
+    handler: handler.processPayment
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - OrderQueue
+              - Arn
+          batchSize: 5
+          maximumBatchingWindow: 10
+
+resources: # Infrastructure code (CloudFormation) to create AWS resources (Moved to top-level for correctness)
+  Resources: # CloudFormation 'Resources' section
+    OrdersTable: # Logical ID for the DynamoDB table resource
+      Type: AWS::DynamoDB::Table # Specifies the AWS resource type (DynamoDB Table)
+      Properties: # Properties to configure the resource
+        TableName: OrdersTable # The actual name of the table in DynamoDB
+        AttributeDefinitions: # Definition of attributes used in the KeySchema
+          - AttributeName: orderId # Name of the attribute
+            AttributeType: S # Type of the attribute (S for String)
+        KeySchema: # Configuration of the Primary Key
+          - AttributeName: orderId # The attribute to use as the Primary Key
+            KeyType: HASH # The key type (HASH indicates Partition Key)
+        BillingMode: PAY_PER_REQUEST # Sets billing mode to On-Demand (pay per request)
+
+    OrderQueue: # Logical ID for the SQS queue resource
+      Type: AWS::SQS::Queue # Specifies the AWS resource type (SQS Queue)
+      Properties: # Properties to configure the queue
+        QueueName: OrderQueue # The actual name of the queue in SQS
+        VisibilityTimeout: 60
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - OrderDLQ
+              - Arn
+          maxReceiveCount: 3
+    OrderDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: OrderDLQ
