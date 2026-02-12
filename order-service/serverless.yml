@@ -29,21 +29,6 @@ provider:
       Resource:
         - Fn::GetAtt: [OrderQueue, Arn]
 
-  # iam: # Configures Identity and Access Management (IAM) permissions
-  #   role: # Configures the default IAM role for the service functions
-  #     statements: # List of permission statements (policies) attached to the role
-  #       - Effect: Allow # Explicitly allows the actions specified below
-  #         Action: # List of AWS actions to allow
-  #           - dynamodb:PutItem # Permission to add a new item to a DynamoDB table
-  #           - dynamodb:UpdateItem # Permission to update an existing item in a DynamoDB table
-  #         Resource:
-  #           - Fn::GetAtt: [OrdersTable, Arn]
-  #       - Effect: Allow # Start of a new permission statement
-  #         Action: # List of actions
-  #           - sqs:SendMessage # Permission to send a message to an SQS queue
-  #         Resource:
-  #           - Fn::GetAtt: [OrdersTable, Arn]
-
 functions: # Definitions of the Lambda functions for this service (Moved to top-level for correctness)
   createOrder: # Defines a function named 'createOrder'
     handler: handler.createOrder # The specific function in 'handler.js' to execute
