@@ -58,12 +58,15 @@ module.exports.processPayment = async (event) => {
       new UpdateCommand({
         TableName: process.env.ORDERS_TABLE,
         Key: { orderId },
-        UpdateExpression: "set #status = :status",
+        UpdateExpression: "SET #status = :status, paymentProcessedAt = :now", // # is used along with status because status is a reserved keyword in DynamoDB
         ExpressionAttributeNames: {
           "#status": "status"
         },
+        ConditionExpression: "#status = :expectedStatus",
         ExpressionAttributeValues: {
-          ":status": newStatus
+          ":status": newStatus,
+          ":now": new Date().toISOString(),
+          ":expectedStatus": 'PENDING'
         }
       })
     )
