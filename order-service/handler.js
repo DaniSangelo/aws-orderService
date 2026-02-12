@@ -1,7 +1,7 @@
 'use strict';
 
 const { randomUUID } = require("crypto");
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBClient, ConditionalCheckFailedException } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 const { OrderStatus } = require("./constants");
@@ -54,23 +54,32 @@ module.exports.processPayment = async (event) => {
     const paymentApproved = Math.random() > 0.3;
     const newStatus = paymentApproved ? OrderStatus.APPROVED : OrderStatus.REJECTED;
 
-    await ddbClient.send(
-      new UpdateCommand({
-        TableName: process.env.ORDERS_TABLE,
-        Key: { orderId },
-        UpdateExpression: "SET #status = :status, paymentProcessedAt = :now", // # is used along with status because status is a reserved keyword in DynamoDB
-        ExpressionAttributeNames: {
-          "#status": "status"
-        },
-        ConditionExpression: "#status = :expectedStatus",
-        ExpressionAttributeValues: {
-          ":status": newStatus,
-          ":now": new Date().toISOString(),
-          ":expectedStatus": OrderStatus.PENDING
-        }
-      })
-    )
+    try {
 
-    console.log(`Order ${orderId} status updated to ${newStatus}`);
+      await ddbClient.send(
+        new UpdateCommand({
+          TableName: process.env.ORDERS_TABLE,
+          Key: { orderId },
+          UpdateExpression: "SET #status = :status, paymentProcessedAt = :now", // # is used along with status because status is a reserved keyword in DynamoDB
+          ExpressionAttributeNames: {
+            "#status": "status"
+          },
+          ConditionExpression: "#status = :expectedStatus",
+          ExpressionAttributeValues: {
+            ":status": newStatus,
+            ":now": new Date().toISOString(),
+            ":expectedStatus": OrderStatus.PENDING
+          }
+        })
+      )
+
+      console.log(`Order ${orderId} status updated to ${newStatus}`);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        console.log(`Order ${orderId} has already been processed`);
+      } else {
+        console.error(`Error processing payment for order ${orderId}:`, error);
+      }
+    }
   }
 }
