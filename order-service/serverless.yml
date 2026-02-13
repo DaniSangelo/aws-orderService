@@ -20,8 +20,13 @@ provider:
       Action:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
+        - dynamodb:Query
       Resource:
         - Fn::GetAtt: [OrdersTable, Arn]
+        - Fn::Join:
+          - ""
+          - - Fn::GetAtt: [OrdersTable, Arn]
+            - "/index/*"
 
     - Effect: Allow
       Action:
@@ -60,10 +65,19 @@ resources: # Infrastructure code (CloudFormation) to create AWS resources (Moved
         AttributeDefinitions: # Definition of attributes used in the KeySchema
           - AttributeName: orderId # Name of the attribute
             AttributeType: S # Type of the attribute (S for String)
+          - AttributeName: idempotencyKey # Name of the attribute
+            AttributeType: S # Type of the attribute (S for String)
         KeySchema: # Configuration of the Primary Key
           - AttributeName: orderId # The attribute to use as the Primary Key
             KeyType: HASH # The key type (HASH indicates Partition Key)
         BillingMode: PAY_PER_REQUEST # Sets billing mode to On-Demand (pay per request)
+        GlobalSecondaryIndexes:
+          - IndexName: IdempotencyIndex
+            KeySchema:
+              - AttributeName: idempotencyKey
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
 
     OrderQueue: # Logical ID for the SQS queue resource
       Type: AWS::SQS::Queue # Specifies the AWS resource type (SQS Queue)
