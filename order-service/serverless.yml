@@ -5,6 +5,19 @@ service: order-service
 
 frameworkVersion: "3"
 
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    stages:
+      - local  # the plugin will only be activated when you use --stage local
+    host: http://localhost # Host where the LocalStack is running
+    edgePort: 4566         # Default port of LocalStack
+    autostart: false       # Since your container is already running, leave it false
+    # networks:
+    #   - host               # Optional: helps communication between containers
+
 provider:
   name: aws
   runtime: nodejs18.x
@@ -27,7 +40,7 @@ provider:
         - Fn::Join:
           - ""
           - - Fn::GetAtt: [OrdersTable, Arn]
-            - "/index/*"
+            - "/index/*" # Allows access to all indexes of the table
 
     - Effect: Allow
       Action:
@@ -54,8 +67,8 @@ functions: # Definitions of the Lambda functions for this service (Moved to top-
             Fn::GetAtt:
               - OrderQueue
               - Arn
-          batchSize: 5
-          maximumBatchingWindow: 10
+          batchSize: 5 # Number of messages to process at once
+          maximumBatchingWindow: 10 # Maximum time to wait before processing messages
 
 resources: # Infrastructure code (CloudFormation) to create AWS resources (Moved to top-level for correctness)
   Resources: # CloudFormation 'Resources' section
@@ -84,13 +97,14 @@ resources: # Infrastructure code (CloudFormation) to create AWS resources (Moved
       Type: AWS::SQS::Queue # Specifies the AWS resource type (SQS Queue)
       Properties: # Properties to configure the queue
         QueueName: OrderQueue # The actual name of the queue in SQS
-        VisibilityTimeout: 60
+        VisibilityTimeout: 60 # The time that a message is invisible in the queue after being received
         RedrivePolicy:
           deadLetterTargetArn:
             Fn::GetAtt:
               - OrderDLQ
               - Arn
           maxReceiveCount: 3
+
     OrderDLQ:
       Type: AWS::SQS::Queue
       Properties:

@@ -5,9 +5,20 @@ const { DynamoDBClient, ConditionalCheckFailedException } = require("@aws-sdk/cl
 const { DynamoDBDocumentClient, PutCommand, UpdateCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 const { OrderStatus } = require("./constants");
-const dynamoDbClient = new DynamoDBClient({});
+
+const config = {
+  region: "us-east-1",
+};
+
+if (process.env.LOCALSTACK_HOSTNAME) {
+  config.endpoint = `http://${process.env.LOCALSTACK_HOSTNAME}:4566`;
+} else if (process.env.IS_LOCAL) {
+  config.endpoint = "http://localhost:4566";
+}
+
+const dynamoDbClient = new DynamoDBClient(config);
 const ddbClient = DynamoDBDocumentClient.from(dynamoDbClient);
-const sqsClient = new SQSClient({});
+const sqsClient = new SQSClient(config);
 const { z } = require('zod')
 
 const orderSchema = z.object({
@@ -46,7 +57,7 @@ module.exports.createOrder = async (event) => {
       }
     }
 
-    const order = await createOrder(validation, idempotencyKey)
+    const order = await insertOrder(validation, idempotencyKey)
     console.log(`Sending order to SQS: ${order.orderId}`);
 
     await sqsClient.send(
@@ -90,7 +101,7 @@ async function getExistingOrder(idempotencyKey) {
   return existingOrder;
 }
 
-async function createOrder(validation, idempotencyKey) {
+async function insertOrder(validation, idempotencyKey) {
   const { customerName, totalAmount } = validation.data;
   const orderId = randomUUID();
   const order = {
@@ -147,6 +158,7 @@ module.exports.processPayment = async (event) => {
         console.log(`Order ${orderId} has already been processed`);
       } else {
         console.error(`Error processing payment for order ${orderId}:`, error);
+        throw error;
       }
     }
   }
