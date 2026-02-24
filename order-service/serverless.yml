@@ -10,6 +10,7 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   environment: # Sets global environment variables available to all functions
+    PAYMENT_APPROVAL_MODE: RANDOM # Environment variable for the payment approval mode
     ORDERS_TABLE: OrdersTable # Environment variable for the DynamoDB table name
     ORDER_QUEUE_URL: # Environment variable for the SQS Queue URL
       Fn::GetAtt:

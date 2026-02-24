@@ -18,7 +18,7 @@ const orderSchema = z.object({
 module.exports.createOrder = async (event) => {
   try {
     const body = JSON.parse(event.body);
-    const idempotencyKey = event.headers['Idempotency-Key'];
+    const idempotencyKey = event.headers['Idempotency-Key'] || event.headers['idempotency-key'] || event.headers['IDEMPOTENCY-KEY'];
     const validation = orderSchema.safeParse(body);
 
     if (!validation.success) {
@@ -37,9 +37,9 @@ module.exports.createOrder = async (event) => {
 
     console.log(`Checking for existing order with idempotency key: ${idempotencyKey}`);
 
-    if (await orderAlreadyExists(idempotencyKey)) {
+    const existingOrder = await getExistingOrder(idempotencyKey);
+    if (existingOrder.Items && existingOrder.Items.length > 0) {
       console.log(`Order ${existingOrder.Items[0].orderId} already exists: ${idempotencyKey}`);
-
       return {
         statusCode: 200,
         body: JSON.stringify(existingOrder.Items[0]),
@@ -47,7 +47,6 @@ module.exports.createOrder = async (event) => {
     }
 
     const order = await createOrder(validation, idempotencyKey)
-
     console.log(`Sending order to SQS: ${order.orderId}`);
 
     await sqsClient.send(
@@ -72,7 +71,7 @@ module.exports.createOrder = async (event) => {
   }
 };
 
-async function orderAlreadyExists(idempotencyKey) {
+async function getExistingOrder(idempotencyKey) {
   /* 
     An elegant way to check for existing order would be to use idempotencyKey as the primary key,
     and the orderId as a secondary index. This would allow us to check for existing orders
@@ -88,7 +87,7 @@ async function orderAlreadyExists(idempotencyKey) {
       }
     })
   )
-  return existingOrder?.Items?.length > 0;
+  return existingOrder;
 }
 
 async function createOrder(validation, idempotencyKey) {
@@ -120,7 +119,7 @@ module.exports.processPayment = async (event) => {
   for (const record of event.Records) {
     const { orderId } = JSON.parse(record.body);
     console.log(`Processing payment for: ${ orderId }`)
-    const paymentApproved = Math.random() > 0.3;
+    const paymentApproved = shouldApprovePayment();
     const newStatus = paymentApproved ? OrderStatus.APPROVED : OrderStatus.REJECTED;
 
     try {
@@ -151,4 +150,10 @@ module.exports.processPayment = async (event) => {
       }
     }
   }
+} 
+
+function shouldApprovePayment() {
+  if (process.env.PAYMENT_APPROVAL_MODE == 'ALWAYS') return true;
+  if (process.env.PAYMENT_APPROVAL_MODE == 'NEVER') return false;
+  return Math.random() > 0.3;
 }
